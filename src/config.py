@@ -25,7 +25,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 # ---- Variáveis de ambiente ----
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen3.6-27b").strip()
 
 DATA_DIR: Path = PROJECT_ROOT / os.getenv("DATA_DIR", "data")
 
