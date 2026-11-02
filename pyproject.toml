@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emporio-musica-agent"
+version = "0.1.0"
+description = "Agente de atendimento da Empório da Música (desafio técnico Artefact - AI Engineer)"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "groq>=0.29.0",
+    "pandas>=3.0.0",
+    "pypdf>=5.2.0",
+    "scikit-learn>=1.9.0",
+    "streamlit>=1.59.0",
+    "python-dotenv>=1.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.0",
+]
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
