@@ -195,6 +195,28 @@ Deliberate guards:
   limit, not a full memory-management solution (see "What I would do with
   more time").
 
+### Streamlit: chat UI with parallel display history
+
+`app.py` keeps two parallel structures in `st.session_state`:
+
+- **`agent_session`** — the `Session` from `src.agent`, holding the full
+  internal history (`system`, `user`, `assistant` with `tool_calls`,
+  `tool` results). This is what `run_turn` consumes and mutates.
+- **`display_history`** — a lightweight list of
+  `{role, content, tool_calls}` for rendering with `st.chat_message`.
+
+Why two structures: the internal history includes JSON of tool results
+(which would flood the UI) and a long system prompt (which should not be
+shown to the customer). Mixing them would either render noisy JSON or
+require filtering logic everywhere. Keeping a separate display history
+makes the render loop trivial and lets us optionally show tool calls in
+an expander without affecting the conversation state.
+
+A sidebar toggle lets the operator (or evaluator) see the tool calls
+that were made. It's off by default to keep the customer-facing view
+clean, and useful in demos to prove the agent is actually querying the
+data instead of hallucinating.
+
 ## Known limitation
 
 **Known limitation — ranking is not perfect.** TF-IDF on a short

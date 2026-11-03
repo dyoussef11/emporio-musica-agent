@@ -49,7 +49,7 @@ class Session:
 
 def get_client() -> Groq:
     config.validate_config(check_api_key=True)
-    return Groq(api_key=config.GROQ_API_KEY)
+    return Groq(api_key=config.GROQ_API_KEY, timeout=30.0, max_retries=1)
 
 
 def run_turn(
