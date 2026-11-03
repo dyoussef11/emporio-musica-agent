@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.data_store import DataStore, get_store
+from src.policy_rag import get_policy_index  # no topo do arquivo, junto aos outros imports
 
 MAX_LIMIT = 20
 DEFAULT_LIMIT = 5
@@ -411,6 +412,199 @@ GET_ORDER_STATUS_SCHEMA: dict[str, Any] = {
                 },
             },
             "required": ["order_id"],
+        },
+    },
+}
+
+
+# --------------------------------------------------------------------- #
+# get_active_promotions
+# --------------------------------------------------------------------- #
+def get_active_promotions(
+    category_id: int | None = None,
+) -> dict[str, Any]:
+    """
+    Lista todas as promoções ativas da loja, enriquecidas com o nome e o
+    preço final de cada produto.
+
+    Use quando o cliente perguntar genericamente sobre promoções
+    ("o que está em promoção?", "tem desconto?"). Para promoção de um
+    produto específico, prefira `search_products` — ele já traz o campo
+    `promotion` por produto.
+
+    Nota de negócio incluída no retorno (`note`): promoções não são
+    cumulativas e o desconto PIX (5%) não incide sobre preço promocional.
+    O LLM deve usar essa nota se o cliente perguntar sobre acumular
+    descontos.
+    """
+    store = get_store()
+    active = store.get_all_active_promotions()
+
+    results: list[dict[str, Any]] = []
+    for promo in active:
+        product = store.get_product_by_id(int(promo["product_id"]))
+        if not product:
+            continue
+
+        # Filtro opcional por categoria
+        if category_id is not None and int(product["category_id"]) != category_id:
+            continue
+
+        # Só faz sentido divulgar promoções de produtos vendáveis
+        if product["status"] not in ("active",):
+            continue
+        if int(product["stock_quantity"]) <= 0:
+            continue
+
+        base_price = float(product["price_brl"])
+        discount = float(promo["discount_percent"])
+        final_price = round(base_price * (1 - discount / 100.0), 2)
+
+        results.append(
+            {
+                "promotion_id": int(promo["promotion_id"]),
+                "product_id": int(product["product_id"]),
+                "product_name": str(product["name"]),
+                "category": store.get_category_name(int(product["category_id"])),
+                "discount_percent": discount,
+                "original_price_brl": base_price,
+                "final_price_brl": final_price,
+                "description": str(promo["description"]),
+                "stock_quantity": int(product["stock_quantity"]),
+            }
+        )
+
+    results.sort(key=lambda r: (-r["discount_percent"], r["final_price_brl"]))
+
+    return {
+        "count": len(results),
+        "results": results,
+        "note": (
+            "Promoções não são cumulativas. O desconto PIX (5%) não incide "
+            "sobre preços já promocionais. Estoque sujeito a disponibilidade."
+        ),
+    }
+
+
+# --------------------------------------------------------------------- #
+# Schema para o tool calling do Groq
+# --------------------------------------------------------------------- #
+GET_ACTIVE_PROMOTIONS_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "get_active_promotions",
+        "description": (
+            "Lista todas as promoções ativas no momento, com nome do produto, "
+            "preço original, preço final e desconto. Use quando o cliente "
+            "perguntar genericamente sobre promoções da loja (ex: 'o que está "
+            "em promoção?', 'tem algum desconto?', 'promoções em ukuleles?'). "
+            "Para um produto específico, use search_products."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category_id": {
+                    "type": "integer",
+                    "description": (
+                        "Opcional. Filtra promoções por categoria. "
+                        "Categorias: 1=Guitarras, 2=Baixos, 3=Baterias/Percussão, "
+                        "4=Teclados/Pianos, 5=Violões, 6=Sopro Madeiras, "
+                        "7=Sopro Metais, 8=Cordas Orquestrais, 9=Ukuleles."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
+
+# --------------------------------------------------------------------- #
+# search_policies
+# --------------------------------------------------------------------- #
+
+
+
+def search_policies(query: str, top_k: int = 3) -> dict[str, Any]:
+    """
+    Busca trechos do manual de políticas relevantes para a pergunta.
+
+    Retorna até `top_k` chunks, cada um com página e score. Se nada
+    passar do threshold mínimo, retorna `count=0` e um `note` explicando
+    que o manual não cobre o assunto — o LLM deve avisar o cliente em vez
+    de inventar uma política.
+    """
+    if not query or not query.strip():
+        return {
+            "query": "",
+            "count": 0,
+            "results": [],
+            "note": "Consulta vazia. Peça ao cliente para reformular a pergunta.",
+        }
+
+    top_k = max(1, min(int(top_k), 5))
+    index = get_policy_index()
+    matches = index.search(query, top_k=top_k)
+
+    if not matches:
+        return {
+            "query": query,
+            "count": 0,
+            "results": [],
+            "note": (
+                "Nenhum trecho do manual de políticas é suficientemente "
+                "relevante para essa pergunta. Diga ao cliente que essa "
+                "informação não está no manual e, se necessário, ofereça "
+                "encaminhar para o atendimento humano."
+            ),
+        }
+
+    return {
+        "query": query,
+        "count": len(matches),
+        "results": [
+            {"page": chunk.page, "text": chunk.text, "score": round(score, 3)}
+            for chunk, score in matches
+        ],
+    }
+
+
+# --------------------------------------------------------------------- #
+# Schema para o tool calling do Groq
+# --------------------------------------------------------------------- #
+SEARCH_POLICIES_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "search_policies",
+        "description": (
+            "Busca trechos relevantes do manual de políticas da Empório da "
+            "Música. Use quando o cliente perguntar sobre: horário de "
+            "funcionamento, formas de pagamento, parcelamento, trocas e "
+            "devoluções, frete e prazos de entrega, garantia, privacidade "
+            "(LGPD), ou se a loja vende um tipo de produto (escopo). "
+            "Retorna trechos com número de página para você citar a fonte. "
+            "Se count=0, informe ao cliente que a informação não está no "
+            "manual — nunca invente uma política."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Pergunta do cliente, em português, preferencialmente "
+                        "com palavras-chave do manual (ex: 'devolução', "
+                        "'horário de funcionamento', 'formas de pagamento')."
+                    ),
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Número de trechos a retornar (padrão 3, máx 5).",
+                    "default": 3,
+                },
+            },
+            "required": ["query"],
         },
     },
 }
