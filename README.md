@@ -61,7 +61,7 @@ emporio-musica-agent/
 │   ├── config.py             # Env vars + path resolution
 │   ├── data_store.py         # CSV loading + typed accessors
 │   ├── policy_rag.py         # (TBD) TF-IDF retrieval over the PDF
-│   ├── tools.py              # Tools the LLM can call
+│   ├── tools.py              # Tools: search_products, get_order_status, get_active_promotions get_order_status)
 │   ├── prompts.py            # (TBD) System prompt
 │   ├── agent.py              # (TBD) Tool-calling loop
 │   └── main.py               # (TBD) CLI entrypoint
@@ -70,3 +70,23 @@ emporio-musica-agent/
 └── tests/
     ├── manual_check_tools.py # Smoke tests for tools
     └── test_tools.py         # (TBD) pytest suite
+```
+
+## Technical decisions
+
+### Active promotions only — never offer an expired discount
+
+`get_active_promotions` filters strictly on `is_active = 1` from
+`promotions.csv`. The source file has 25 promotions but only **4** are
+active at any given time (product IDs 127, 121, 90, 94 at the time of
+writing). This is deliberate: the store policy says *"nunca prometer um
+desconto que não está mais vigente"*, and offering an expired campaign is
+the kind of mistake that triggers customer complaints.
+
+The tool also filters out promoted products that are `discontinued` or
+`out of stock` — a discounted product that can't be sold is misleading.
+
+Return payload includes a business-rule `note` reminding the LLM that
+**promotions are not cumulative** and that the **PIX 5% discount does not
+apply over promotional prices**. This lets the model enforce the policy in
+prose without another tool call.
