@@ -63,13 +63,14 @@ emporio-musica-agent/
 │   ├── policy_rag.py         # (TBD) TF-IDF retrieval over the PDF
 │   ├── tools.py              # Tools: search_products, get_order_status, get_active_promotions get_order_status)
 │   ├── prompts.py            # System prompt + tool schemas + tool map
-│   ├── agent.py              # (TBD) Tool-calling loop
+│   ├── agent.py              # Tool-calling loop (Groq) + Session
 │   └── main.py               # (TBD) CLI entrypoint
 ├── app.py                    # (TBD) Streamlit chat UI
 ├── examples/                 # Example conversations (challenge requirement)
 └── tests/
     ├── manual_check_tools.py # Smoke tests for tools
     └── test_tools.py         # (TBD) pytest suite
+    
 ```
 
 ## How to install
@@ -128,17 +129,6 @@ apply over promotional prices**. This lets the model enforce the policy in
 prose without another tool call.
 
 
-**Known limitation — ranking is not perfect.** TF-IDF on a short
-Portuguese document with repeated domain vocabulary is prone to
-false positives: e.g. "posso devolver um produto?" ranks a section
-about discontinued products above the actual returns section, because
-"devolver"/"devolução" occurs in both. Empirically, the correct chunk
-appears in the **top 4** for every query tested in
-`tests/manual_check_tools.py`. The system prompt therefore instructs
-the LLM to read all returned chunks and select the one that actually
-answers the question, rather than automatically trusting chunk #1.
-
-
 ### System prompt language and structure
 
 The `SYSTEM_PROMPT` is written in **Portuguese** on purpose: the target
@@ -154,3 +144,59 @@ easy to audit against the store's manual (sections 7.1, 7.2, 7.3) and
 easy to extend. Example dialogues are included to anchor tone and to
 demonstrate the tool-calling flow — they function as lightweight few-shot
 examples without burning tokens on real demonstration calls.
+
+### Tool-calling loop and error handling
+
+`run_turn(session, message)` runs one full turn: appends the user message,
+calls the LLM with all tool schemas, executes any tool calls the model
+requests, and loops until the model produces a final text response.
+
+Deliberate guards:
+
+- **`MAX_TOOL_ITERATIONS = 5`.** Prevents runaway loops (each iteration
+  consumes free-tier quota). On the 5th iteration without a final answer,
+  the agent raises a friendly `AgentError` asking the user to rephrase.
+- **Serialization of `tool_calls` into plain dicts** before appending to
+  history. The Groq SDK returns pydantic objects; converting to `dict`
+  keeps `session.messages` JSON-serializable (useful for debugging and,
+  later, persistence).
+- **Per-error handling.** `RateLimitError` → "try again in a few seconds".
+  `APIStatusError 413` (request too large) → "start a new conversation",
+  since it's almost always long history. Generic `APIError` → neutral
+  message. Each case is distinct because the user-facing advice differs.
+- **Tool errors are results, not exceptions.** Invalid arguments from the
+  LLM, unknown tool names, `TypeError` on the tool signature, or an
+  unexpected exception inside a tool are all returned as
+  `{"error": "...", "message": "..."}` in the `tool` message. The loop
+  continues and the LLM gets a chance to fix its own call. This mirrors
+  what production agents do: keep the conversation alive, let the model
+  self-correct.
+- **`temperature=0.3`, `max_tokens=800`.** Consistency over creativity for
+  customer service; 800 tokens is plenty for a WhatsApp-style reply.
+- **`MAX_HISTORY_MESSAGES = 20` with a tool-aware trim.** When history
+  grows past 20 messages, the oldest are dropped — but never in the middle
+  of an `assistant.tool_calls → tool` sequence (which would break the API
+  contract). This is a defensive guard against the free-tier request-size
+  limit, not a full memory-management solution (see "What I would do with
+  more time").
+
+## Known limitation
+
+**Known limitation — ranking is not perfect.** TF-IDF on a short
+Portuguese document with repeated domain vocabulary is prone to
+false positives: e.g. "posso devolver um produto?" ranks a section
+about discontinued products above the actual returns section, because
+"devolver"/"devolução" occurs in both. Empirically, the correct chunk
+appears in the **top 4** for every query tested in
+`tests/manual_check_tools.py`. The system prompt therefore instructs
+the LLM to read all returned chunks and select the one that actually
+answers the question, rather than automatically trusting chunk #1.
+- The agent does **not** compute date arithmetic on order status. If a
+  customer asks "can I return order 1?" and that order was delivered over
+  a year ago, the agent confirms the 7-day window rule from the policy
+  but does not calculate that the window has expired — it asks the
+  customer for the delivery date instead. A production version should
+  compare `estimated_delivery` against `today` and enforce the window
+  automatically.
+
+  
