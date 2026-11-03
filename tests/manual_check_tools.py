@@ -9,8 +9,12 @@ Uso:
     python tests/manual_check_tools.py
 """
 
-from src.tools import search_products
-from src.tools import get_order_status
+from src.tools import (
+    get_active_promotions,
+    get_order_status,
+    search_policies,
+    search_products,
+)
 
 
 def check(title: str, **kwargs):
@@ -42,6 +46,15 @@ def check_order(title: str, **kwargs):
         print(f"    - {it['quantity']}x {it['name']}  $ {it['unit_price_brl']:.2f}")
     print(f"  hint: {o['next_step_hint']}")
 
+def check_policy(title: str, **kwargs):
+    print(f"\n=== {title} ===")
+    r = search_policies(**kwargs)
+    print(f"count={r['count']}")
+    for hit in r["results"]:
+        preview = hit["text"].replace("\n", " ")[:160]
+        print(f"  p.{hit['page']} (score={hit['score']}): {preview}...")
+    if r.get("note"):
+        print(f"  note: {r['note']}")
 
 if __name__ == "__main__":
     # 1) Violões até $ 1000 (cenário do enunciado)
@@ -85,3 +98,11 @@ if __name__ == "__main__":
     # Order 17: cancelled, notes "Pedido cancelado pelo cliente antes do processamento"
     # customer 15 (Matheus Ramos Correia)
     check_order("Order 17 — cancelled com notas", order_id=17, email="matheus.correia@hayoo.com.br")
+    
+        # 7) Políticas — cenários variados
+    check_policy("Devolução / arrependimento", query="posso devolver um produto?")
+    check_policy("Horário de funcionamento", query="qual o horário de funcionamento?")
+    check_policy("Formas de pagamento", query="quais formas de pagamento vocês aceitam?")
+    check_policy("Escopo — acessórios", query="vocês vendem cordas e acessórios?")
+    check_policy("Garantia", query="como funciona a garantia?")
+    check_policy("Fora do escopo do manual", query="vocês fazem entrega em Manaus?")

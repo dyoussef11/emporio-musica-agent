@@ -526,7 +526,7 @@ GET_ACTIVE_PROMOTIONS_SCHEMA: dict[str, Any] = {
 
 
 
-def search_policies(query: str, top_k: int = 3) -> dict[str, Any]:
+def search_policies(query: str, top_k: int = 4) -> dict[str, Any]:
     """
     Busca trechos do manual de políticas relevantes para a pergunta.
 
@@ -543,7 +543,7 @@ def search_policies(query: str, top_k: int = 3) -> dict[str, Any]:
             "note": "Consulta vazia. Peça ao cliente para reformular a pergunta.",
         }
 
-    top_k = max(1, min(int(top_k), 5))
+    top_k = max(1, min(int(top_k), 6))
     index = get_policy_index()
     matches = index.search(query, top_k=top_k)
 
@@ -600,8 +600,8 @@ SEARCH_POLICIES_SCHEMA: dict[str, Any] = {
                 },
                 "top_k": {
                     "type": "integer",
-                    "description": "Número de trechos a retornar (padrão 3, máx 5).",
-                    "default": 3,
+                    "description": "Número de trechos a retornar (padrão 4, máx 6).",
+                    "default": 4,
                 },
             },
             "required": ["query"],

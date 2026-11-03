@@ -72,6 +72,42 @@ emporio-musica-agent/
     └── test_tools.py         # (TBD) pytest suite
 ```
 
+## How to install
+
+### You need first install `UV`:
+
+### Linux/MacOs
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+or
+```
+brew install uv
+```
+
+
+### Windows
+```
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+or 
+
+```
+winget install --id=astral-sh.uv -e
+```
+
+### Python (pip)
+
+```
+pip install uv
+```
+### After this, use this command: 
+
+```
+uv sync --extra dev
+```
+
 ## Technical decisions
 
 ### Active promotions only — never offer an expired discount
@@ -90,3 +126,14 @@ Return payload includes a business-rule `note` reminding the LLM that
 **promotions are not cumulative** and that the **PIX 5% discount does not
 apply over promotional prices**. This lets the model enforce the policy in
 prose without another tool call.
+
+
+**Known limitation — ranking is not perfect.** TF-IDF on a short
+Portuguese document with repeated domain vocabulary is prone to
+false positives: e.g. "posso devolver um produto?" ranks a section
+about discontinued products above the actual returns section, because
+"devolver"/"devolução" occurs in both. Empirically, the correct chunk
+appears in the **top 4** for every query tested in
+`tests/manual_check_tools.py`. The system prompt therefore instructs
+the LLM to read all returned chunks and select the one that actually
+answers the question, rather than automatically trusting chunk #1.
