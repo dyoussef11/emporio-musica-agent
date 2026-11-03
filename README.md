@@ -69,7 +69,7 @@ emporio-musica-agent/
 ├── examples/                 # Example conversations (challenge requirement)
 └── tests/
     ├── manual_check_tools.py # Smoke tests for tools
-    └── test_tools.py         # (TBD) pytest suite
+    └── test_tools.py         # pytest suite for tools and policy retrieval
     
 ```
 
@@ -216,6 +216,41 @@ A sidebar toggle lets the operator (or evaluator) see the tool calls
 that were made. It's off by default to keep the customer-facing view
 clean, and useful in demos to prove the agent is actually querying the
 data instead of hallucinating.
+
+### Tests: pytest over real CSVs, not mocks
+
+`tests/test_tools.py` runs against the real CSVs and the real policy PDF,
+not mocks. Rationale:
+
+- The data is the **specification** of the challenge. A test that mocks
+  `get_store()` would confirm that the mock returns what the mock was
+  built to return — useless. Testing against the real CSVs catches the
+  cases that actually matter: a promotion that stopped being active, a
+  product that went out of stock, a phone format that we forgot to
+  handle.
+- Fixtures are `scope="module"` so `get_store()` and `get_policy_index()`
+  are loaded once per session (they are also `@lru_cache`d, so the cost
+  is negligible).
+
+What is **not** tested, on purpose:
+
+- **`src/agent.py` `run_turn`** — testing it requires network calls and
+  burns free-tier quota. `tests/manual_check_agent.py` is a smoke test
+  run manually, not in CI. A production setup would inject a fake LLM
+  client into `run_turn` (already accepted as an optional parameter) and
+  test the tool-call loop deterministically.
+- **Streamlit UI** — `app.py` is glue; testing it would require
+  Streamlit's testing harness, which adds complexity for a prototype.
+
+Coverage (by tool):
+
+| Tool | What is tested |
+|---|---|
+| `search_products` | category filter, price range, name search, in-stock default, discontinued flag, promotion application, limit clamping, ordering |
+| `get_order_status` | success via email, success via phone, phone format tolerance, `verification_required`, `verification_failed` on wrong credentials, **same error** for nonexistent order, cancelled order notes, confirmed without tracking |
+| `get_active_promotions` | only `is_active=1`, category filter, empty category, discount/final-price arithmetic |
+| `search_policies` | empty query, real hits (payment, scope, warranty), `top_k` clamp, result shape |
+| `DataStore` / `PolicyIndex` | row counts, `specs` parsing, chunk validity |
 
 ## Known limitation
 
