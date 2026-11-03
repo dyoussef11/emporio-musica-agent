@@ -62,7 +62,7 @@ emporio-musica-agent/
 │   ├── data_store.py         # CSV loading + typed accessors
 │   ├── policy_rag.py         # (TBD) TF-IDF retrieval over the PDF
 │   ├── tools.py              # Tools: search_products, get_order_status, get_active_promotions get_order_status)
-│   ├── prompts.py            # (TBD) System prompt
+│   ├── prompts.py            # System prompt + tool schemas + tool map
 │   ├── agent.py              # (TBD) Tool-calling loop
 │   └── main.py               # (TBD) CLI entrypoint
 ├── app.py                    # (TBD) Streamlit chat UI
@@ -137,3 +137,20 @@ appears in the **top 4** for every query tested in
 `tests/manual_check_tools.py`. The system prompt therefore instructs
 the LLM to read all returned chunks and select the one that actually
 answers the question, rather than automatically trusting chunk #1.
+
+
+### System prompt language and structure
+
+The `SYSTEM_PROMPT` is written in **Portuguese** on purpose: the target
+customer writes in PT-BR, the source policy PDF is in PT-BR, and a
+PT-BR prompt keeps the LLM in the correct tone and idiom. The README and
+code comments are in English because the evaluation context
+(Artefact's email: *"All responses must be in English!"*) is in English
+— but the **agent's output language is the customer's language**.
+
+The prompt is organized in fixed sections (persona, scope, tools,
+critical rules, business rules, guardrails, examples). This makes it
+easy to audit against the store's manual (sections 7.1, 7.2, 7.3) and
+easy to extend. Example dialogues are included to anchor tone and to
+demonstrate the tool-calling flow — they function as lightweight few-shot
+examples without burning tokens on real demonstration calls.
