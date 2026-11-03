@@ -64,7 +64,7 @@ emporio-musica-agent/
 │   ├── tools.py              # Tools: search_products, get_order_status, get_active_promotions get_order_status)
 │   ├── prompts.py            # System prompt + tool schemas + tool map
 │   ├── agent.py              # Tool-calling loop (Groq) + Session
-│   └── main.py               # (TBD) CLI entrypoint
+│   └── main.py               # CLI (one-shot + REPL)
 ├── app.py                    # (TBD) Streamlit chat UI
 ├── examples/                 # Example conversations (challenge requirement)
 └── tests/
@@ -107,6 +107,21 @@ pip install uv
 
 ```
 uv sync --extra dev
+```
+
+### Set `GROQ_API_KEY` in `.env` (see Setup above). Then:
+
+#### CLI
+
+```bash
+# Interactive REPL
+python -m src.main
+
+# One-shot message
+python -m src.main --message "Quanto custa o Takamine GD20?"
+
+# Verbose (shows tool calls in the log)
+python -m src.main --verbose
 ```
 
 ## Technical decisions
